@@ -1282,6 +1282,13 @@
     btn.textContent='Subscribed!';btn.style.background='#1C1008';btn.disabled=true;inp.value='';
   }
 
+  // loading="lazy" breaks inside transform-style:preserve-3d on mobile — images never load.
+  // Strip the attribute and force a src reload for any image not yet fetched.
+  document.querySelectorAll('.flip-wrap img').forEach(img=>{
+    img.removeAttribute('loading');
+    if(!img.complete||img.naturalWidth===0){const s=img.src;img.src='';img.src=s;}
+  });
+
   // Tap-to-flip on touch devices (hover:none = no primary pointer hover)
   if(window.matchMedia('(hover:none)').matches){
     document.querySelectorAll('.flip-wrap').forEach(wrap=>{

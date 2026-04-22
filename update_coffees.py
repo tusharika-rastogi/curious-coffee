@@ -409,6 +409,30 @@ CARDS_END   = "<!-- COFFEE_CARDS_END -->"
 COUNT_RE    = re.compile(r"See All Coffees \(\d+ more\)")
 
 
+def extract_existing_images(html):
+    """Return {product_name_lower: (bag_img, farm_img)} from the current cards section."""
+    existing = {}
+    cards_section_m = re.search(
+        r"<!-- COFFEE_CARDS_START -->(.*?)<!-- COFFEE_CARDS_END -->", html, re.DOTALL
+    )
+    if not cards_section_m:
+        return existing
+    section = cards_section_m.group(1)
+    # Each card block
+    for card in re.finditer(r'<div class="flip-wrap[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</div>', section, re.DOTALL):
+        block = card.group(1)
+        name_m = re.search(r'class="card-producer"[^>]*>([^<]+)', block)
+        bag_m  = re.search(r'card-img-wrap.*?<img[^>]+src="([^"]+)"', block, re.DOTALL)
+        farm_m = re.search(r'class="back-img"[^>]+src="([^"]+)"', block)
+        if name_m:
+            name = name_m.group(1).strip().lower()
+            bag  = bag_m.group(1)  if bag_m  and bag_m.group(1)  else ""
+            farm = farm_m.group(1) if farm_m and farm_m.group(1) else ""
+            if bag or farm:
+                existing[name] = (bag, farm)
+    return existing
+
+
 def update_index(coffees):
     try:
         with open(INDEX_FILE, "r", encoding="utf-8") as f:
@@ -425,6 +449,20 @@ def update_index(coffees):
         print("  ... all the flip-wrap divs ...")
         print(f"  {CARDS_END}")
         sys.exit(1)
+
+    # Preserve existing image URLs so a failed scrape never wipes them
+    existing_imgs = extract_existing_images(html)
+    for c in coffees:
+        if not c["bag_img"] or not c["farm_img"]:
+            fallback = existing_imgs.get(c["name"].lower(), ("", ""))
+            if not c["bag_img"]:
+                c["bag_img"] = fallback[0]
+                if fallback[0]:
+                    print(f"  Using existing bag image for: {c['name']}")
+            if not c["farm_img"]:
+                c["farm_img"] = fallback[1] or fallback[0]
+                if fallback[1] or fallback[0]:
+                    print(f"  Using existing farm image for: {c['name']}")
 
     cards_html, extra = build_cards_html(coffees)
 

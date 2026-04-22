@@ -1283,16 +1283,17 @@
   }
 
   // loading="lazy" breaks inside transform-style:preserve-3d on mobile — images never load.
-  // Strip the attribute and force a src reload for any image not yet fetched.
-  document.querySelectorAll('.flip-wrap img').forEach(img=>{
-    img.removeAttribute('loading');
-    if(!img.complete||img.naturalWidth===0){const s=img.src;img.src='';img.src=s;}
-  });
+  document.querySelectorAll('.flip-wrap img').forEach(img=>{img.loading='eager'});
 
   // Tap-to-flip on touch devices (hover:none = no primary pointer hover)
   if(window.matchMedia('(hover:none)').matches){
     document.querySelectorAll('.flip-wrap').forEach(wrap=>{
       wrap.addEventListener('click',e=>{
+        const isFlipped=wrap.classList.contains('flipped');
+        // iOS routes taps to the hidden backface element — ignore those clicks
+        const hiddenFace=wrap.querySelector(isFlipped?'.flip-front':'.flip-back');
+        if(hiddenFace.contains(e.target))return;
+        // Let links/buttons on the visible face navigate normally
         if(e.target.closest('a,button'))return;
         wrap.classList.toggle('flipped');
       });

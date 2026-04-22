@@ -95,7 +95,7 @@
 
     .flip-wrap{perspective:1200px;height:540px;position:relative}
     .flip-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .7s cubic-bezier(.4,0,.2,1)}
-    .flip-wrap:hover .flip-inner{transform:rotateY(180deg)}
+    .flip-wrap:hover .flip-inner,.flip-wrap.flipped .flip-inner{transform:rotateY(180deg)}
     .flip-front,.flip-back{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:16px;overflow:hidden}
     .flip-front{background:rgba(42,26,14,.95);border:1px solid rgba(61,181,74,.12);display:flex;flex-direction:column}
     .card-img-wrap{background:#f5f3ef;height:240px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
@@ -308,10 +308,6 @@
       .man-grid,.cab-grid,.learn-grid,.cof-grid,.loc-inner,.roast-inner,.rev-grid,.club-inner{grid-template-columns:1fr}
       .rev-photos{grid-template-columns:repeat(2,1fr)}
       .sub-tiers{grid-template-columns:1fr}
-      .flip-wrap{height:auto}
-      .flip-inner{transform:none!important}
-      .flip-front,.flip-back{position:static;transform:none;backface-visibility:visible;-webkit-backface-visibility:visible}
-      .flip-back{margin-top:1rem;border-radius:16px}
       .foot-grid{grid-template-columns:1fr;gap:2rem}
       .nl-form{flex-direction:column;border-radius:12px}
       .nl-form input{border-radius:12px 12px 0 0}
@@ -1244,7 +1240,7 @@
   window.addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>80),{passive:true});
 
   const mob=document.getElementById('mobMenu');
-  document.getElementById('hamburger').addEventListener('click',()=>{mob.classList.add('open');document.body.style.overflow='hidden';});
+  document.getElementById('hamburger').addEventListener('click',()=>{const isOpen=mob.classList.toggle('open');document.body.style.overflow=isOpen?'hidden':''});
   function closeMob(){mob.classList.remove('open');document.body.style.overflow='';}
   document.getElementById('mobClose').addEventListener('click',closeMob);
 
@@ -1281,6 +1277,16 @@
     const inp=btn.previousElementSibling;
     if(!inp.value.includes('@')){inp.style.outline='2px solid #C8593A';setTimeout(()=>inp.style.outline='',1500);return;}
     btn.textContent='Subscribed!';btn.style.background='#1C1008';btn.disabled=true;inp.value='';
+  }
+
+  // Tap-to-flip on touch devices (hover:none = no primary pointer hover)
+  if(window.matchMedia('(hover:none)').matches){
+    document.querySelectorAll('.flip-wrap').forEach(wrap=>{
+      wrap.addEventListener('click',e=>{
+        if(e.target.closest('a,button'))return;
+        wrap.classList.toggle('flipped');
+      });
+    });
   }
 
   // Smooth scroll for anchor links only (not buttons)

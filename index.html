@@ -120,10 +120,10 @@
     .oos-price{color:rgba(245,240,232,.4)}
     .flip-back{background:rgba(20,42,38,.97);border:1px solid rgba(42,157,143,.25);transform:rotateY(180deg);display:flex;flex-direction:column}
     .back-img{width:100%;height:200px;object-fit:cover;object-position:top;flex-shrink:0}
-    .back-body{padding:1.4rem;display:flex;flex-direction:column;gap:.7rem;flex:1;overflow:hidden}
-    .back-lbl{font-family:var(--fu);font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--teal)}
+    .back-body{padding:1.4rem;display:flex;flex-direction:column;gap:.7rem;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    .back-lbl{font-family:var(--fu);font-size:.6rem;letter-spacing:.1em;color:var(--teal)}
     .back-title{font-family:var(--fd);font-size:1.05rem;font-weight:700;color:var(--chalk);line-height:1.2}
-    .back-desc{font-family:var(--fb);font-size:.8rem;color:rgba(245,240,232,.78);line-height:1.72;overflow:hidden;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical}
+    .back-desc{font-family:var(--fb);font-size:.8rem;color:rgba(245,240,232,.78);line-height:1.72}
     .back-btn{font-family:var(--fu);font-size:.74rem;font-weight:600;letter-spacing:.1em;color:var(--chalk);background:var(--teal);padding:.5rem 1.1rem;border-radius:999px;align-self:flex-start;margin-top:auto;transition:transform .2s,box-shadow .2s;white-space:nowrap;display:inline-block}
     .back-btn:hover{transform:scale(1.04);box-shadow:0 4px 18px rgba(42,157,143,.45)}
     .oos-back{background:rgba(200,89,58,.25);cursor:default;pointer-events:none}
@@ -231,9 +231,12 @@
     .roast-right{display:flex;align-items:center;justify-content:center}
     .roast-img{width:100%;max-width:460px;aspect-ratio:1;object-fit:cover;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.45);border:2px solid rgba(61,181,74,.12)}
     .roast-flip{perspective:1000px;max-width:460px;width:100%}
-    .roast-flip-inner{position:relative;width:100%;aspect-ratio:1;transform-style:preserve-3d;transition:transform .7s cubic-bezier(.4,0,.2,1);border-radius:12px}
-    .roast-flip:hover .roast-flip-inner{transform:rotateY(180deg)}
+    .roast-flip-inner{position:relative;width:100%;aspect-ratio:1;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;transition:transform .7s cubic-bezier(.4,0,.2,1);border-radius:12px}
+    .roast-flip:hover .roast-flip-inner,.roast-flip.flipped .roast-flip-inner{transform:rotateY(180deg)}
     .roast-flip-front,.roast-flip-back{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);border:2px solid rgba(61,181,74,.12)}
+    .roast-flip .roast-flip-back{pointer-events:none}
+    .roast-flip.flipped .roast-flip-front{pointer-events:none}
+    .roast-flip.flipped .roast-flip-back{pointer-events:auto}
     .roast-flip-front img,.roast-flip-back img{width:100%;height:100%;object-fit:cover}
     .roast-flip-back{transform:rotateY(180deg)}
     .roast-flip-hint{font-family:var(--fu);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:rgba(245,240,232,.3);text-align:center;margin-top:.75rem}
@@ -432,7 +435,7 @@
               />
             </div>
           </div>
-          <p class="roast-flip-hint">Hover to meet Mike</p>
+          <p class="roast-flip-hint">Click to Meet the Owner: Mike Bawden</p>
         </div>
       </div>
     </div>
@@ -1577,13 +1580,15 @@
         const isFlipped=wrap.classList.contains('flipped');
         const visibleFace=wrap.querySelector(isFlipped?'.flip-back':'.flip-front');
         const link=e.target.closest('a,button');
-        // Let links/buttons on the currently visible face navigate normally
         if(link && visibleFace.contains(link))return;
-        // Block navigation for hidden-face links (iOS hit-test confusion), but still flip
         if(link)e.preventDefault();
         wrap.classList.toggle('flipped');
       });
     });
+
+    // Roast flip (no links inside, so simpler toggle)
+    const roastFlip=document.querySelector('.roast-flip');
+    if(roastFlip) roastFlip.addEventListener('click',()=>roastFlip.classList.toggle('flipped'));
   }
 
   // Smooth scroll for anchor links only (not buttons)

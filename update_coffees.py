@@ -189,7 +189,20 @@ def extract_description(html):
 
 # Lookahead that stops field-value capture at the next known field name + colon.
 # Requiring the colon prevents "Farm Valley" in an origin value from triggering a stop.
-_FIELD_STOP = r"(?=(?:Farm|Origin|Variety|Varietal|Process|Notes?|Rest|Altitude|Elevation|Producers?|Region)\s*:|Brewing[^:\n]*:|\Z)"
+_FIELD_STOP = r"(?=(?:Farm|Origin|Variety|Varietal|Process|Notes?|Altitude|Elevation|Producers?|Region)\s*:|Rest[^:\n]*:|Brewing[^:\n]*:|\Z)"
+
+_FIELD_LINE_RE = re.compile(
+    r"^(?:Farm|Origin|Variety|Varietal|Process|Notes?|Altitude|Elevation|Producers?|Region|Farmer|Rest[^:]*|Brewing[^:]*)\s*:",
+    re.IGNORECASE,
+)
+
+def extract_narrative(description):
+    """Return only the prose lines from a description, stripping field-label lines."""
+    lines = description.splitlines()
+    prose = [l for l in lines if not _FIELD_LINE_RE.match(l.strip())]
+    # Collapse runs of blank lines and strip leading/trailing whitespace
+    text = "\n".join(prose).strip()
+    return re.sub(r"\n{3,}", "\n\n", text)
 
 
 def _wix_imgs(html):
@@ -285,9 +298,9 @@ def build_tasting_pills(notes_text):
 
 
 def build_card(cid, name, variety, origin_line, price, oos,
-               bag_img, farm_img, back_lbl, description, link, category, hidden):
+               bag_img, farm_img, back_lbl, description, raw_description, link, category, hidden):
 
-    notes_html = build_tasting_pills(description)
+    notes_html = build_tasting_pills(raw_description)
     if not notes_html:
         notes_html = '<span class="pill g">Specialty Coffee</span>'
 
@@ -422,7 +435,8 @@ def scrape_shop():
             "bag_img":     bag_img,
             "farm_img":    farm_img or bag_img,
             "back_lbl":    back_lbl,
-            "description": description,
+            "description": extract_narrative(description),
+            "raw_description": description,   # used for tasting-pill extraction
             "category":    category,
         })
 
@@ -442,19 +456,20 @@ def build_cards_html(coffees):
         cid    = i + 1
         hidden = cid > SHOW_INITIALLY
         card   = build_card(
-            cid          = cid,
-            name         = c["name"],
-            variety      = c["variety"],
-            origin_line  = c["origin"],
-            price        = c["price"],
-            oos          = c["oos"],
-            bag_img      = c["bag_img"],
-            farm_img     = c["farm_img"],
-            back_lbl     = c["back_lbl"],
-            description  = c["description"],
-            link         = c["url"],
-            category     = c["category"],
-            hidden       = hidden,
+            cid             = cid,
+            name            = c["name"],
+            variety         = c["variety"],
+            origin_line     = c["origin"],
+            price           = c["price"],
+            oos             = c["oos"],
+            bag_img         = c["bag_img"],
+            farm_img        = c["farm_img"],
+            back_lbl        = c["back_lbl"],
+            description     = c["description"],
+            raw_description = c["raw_description"],
+            link            = c["url"],
+            category        = c["category"],
+            hidden          = hidden,
         )
         cards_html.append(card)
     return "\n".join(cards_html)

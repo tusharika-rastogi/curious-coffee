@@ -137,7 +137,12 @@ HEADERS = {
     )
 }
 
+def _safe_url(url):
+    """Percent-encode non-ASCII characters in a URL so urllib can handle them."""
+    return urllib.parse.quote(url, safe=":/?=#&%+")
+
 def fetch(url, retries=3, delay=2):
+    url = _safe_url(url)
     for attempt in range(retries):
         try:
             req = urllib.request.Request(url, headers=HEADERS)

@@ -178,7 +178,7 @@ def extract_description(html):
         text = text.replace("&#39;", "'").replace("&quot;", '"').replace("&nbsp;", " ").replace("\xa0", " ")
         lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
         if lines:
-            return "\n".join(lines[:10])
+            return "\n".join(lines)
     return _og_meta(html, "description")
 
 
@@ -214,13 +214,22 @@ def extract_bag_img(html):
     return imgs[0] if imgs else ""
 
 
+def _wix_crop(base_url, w, h, align="t"):
+    """Return a Wix fill URL with server-side crop; strips any existing /v1/ params first."""
+    base = base_url.split("/v1/")[0]
+    return f"{base}/v1/fill/w_{w},h_{h},al_{align},q_85/file.jpg"
+
+
 def extract_farm_img(html):
-    """Farm/secondary image: second script-tag URL; fallback to og:image."""
+    """Farm/secondary image: second script-tag URL; fallback to og:image.
+    Requests a top-aligned crop so faces stay in frame."""
     imgs = _wix_imgs(html)
     if len(imgs) >= 2:
-        return imgs[1]
+        return _wix_crop(imgs[1], 600, 400)
     url = _og_meta(html, "image")
-    return url if url and "wixstatic" in url else (imgs[0] if imgs else "")
+    if url and "wixstatic" in url:
+        return _wix_crop(url, 600, 400)
+    return imgs[0] if imgs else ""
 
 
 # ── CATEGORY & POSITION HELPERS ────────────────────────────────────────────
@@ -290,9 +299,6 @@ def build_card(cid, name, variety, origin_line, price, oos,
         back_btn = f'<a href="{link}" target="_blank" rel="noopener" class="back-btn">Buy Now {price}</a>'
         price_cls = ""
 
-    # Truncate description for back card
-    desc_short = description[:400] + "..." if len(description) > 400 else description
-
     return f"""
       <div class="flip-wrap reveal" data-card-id="{cid}"{hidden_attr} role="article">
         <div class="flip-inner">
@@ -317,7 +323,7 @@ def build_card(cid, name, variety, origin_line, price, oos,
             <div class="back-body">
               <span class="back-lbl">{back_lbl}</span>
               <h3 class="back-title">{name}</h3>
-              <p class="back-desc">{desc_short}</p>
+              <p class="back-desc">{description}</p>
               {back_btn}
             </div>
           </div>

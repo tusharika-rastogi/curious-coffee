@@ -265,8 +265,13 @@ def build_tasting_pills(notes_text):
     if not m:
         return ""
     raw = m.group(1).strip().rstrip(".")
-    # Split on comma or semicolon
-    items = [n.strip() for n in re.split(r"[,;]", raw) if n.strip()][:4]
+    # Split on comma or semicolon; discard items that look like sentences (long or contain periods)
+    items = [
+        n.strip() for n in re.split(r"[,;]", raw)
+        if n.strip() and len(n.strip()) <= 35 and "." not in n
+    ][:4]
+    if not items:
+        return ""
     pills = []
     for i, item in enumerate(items):
         color = PILL_COLORS[i % len(PILL_COLORS)]
@@ -379,20 +384,27 @@ def scrape_shop():
         name_m = re.search(r"<h1[^>]*>(.*?)</h1>", page_html, re.DOTALL)
         name = re.sub(r"<[^>]+>", "", name_m.group(1)).strip() if name_m else slug.replace("-", " ").title()
 
+        def _field(m, maxlen=80):
+            """Return cleaned match group(1), or '' if suspiciously long (bad parse)."""
+            if not m:
+                return ""
+            val = m.group(1).strip().rstrip(".").strip()
+            return val if len(val) <= maxlen else ""
+
         # Origin line from description (fall back to Region: for products that use that label)
         origin_m = (
             re.search(r"[Oo]rigin[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
             or re.search(r"[Rr]egion[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
         )
-        origin_line = origin_m.group(1).strip().rstrip(".").strip() if origin_m else "Specialty Coffee"
+        origin_line = _field(origin_m) or "Specialty Coffee"
 
         # Variety
         var_m = re.search(r"[Vv]ariet(?:y|ies)?[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
-        variety = var_m.group(1).strip().rstrip(".").strip() if var_m else ""
+        variety = _field(var_m)
 
         # Back label (altitude / elevation)
         alt_m = re.search(r"(?:[Aa]ltitude|[Ee]levation)[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
-        alt_txt = alt_m.group(1).strip().rstrip(".").strip() if alt_m else ""
+        alt_txt = _field(alt_m, maxlen=30)
         back_lbl = f"{origin_line}" + (f" &middot; {alt_txt}" if alt_txt else "")
 
         coffees.append({

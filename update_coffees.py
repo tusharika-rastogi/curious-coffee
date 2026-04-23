@@ -284,10 +284,13 @@ def build_tasting_pills(notes_text):
     if not m:
         return ""
     raw = m.group(1).strip().rstrip(".")
-    # Split on comma or semicolon; discard items that look like sentences (long or contain periods)
+    _FILLER = re.compile(r"^(and|or|but|with|a |an |so |more|much)\b", re.IGNORECASE)
     items = [
         n.strip() for n in re.split(r"[,;]", raw)
-        if n.strip() and len(n.strip()) <= 35 and "." not in n
+        if n.strip()
+        and len(n.strip()) <= 35
+        and "." not in n
+        and not _FILLER.match(n.strip())
     ][:4]
     if not items:
         return ""

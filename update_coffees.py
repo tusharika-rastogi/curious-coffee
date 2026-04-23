@@ -175,7 +175,7 @@ def extract_description(html):
         raw = re.sub(r"<br\s*/?>", "\n", raw, flags=re.IGNORECASE)
         text = re.sub(r"<[^>]+>", "", raw)
         text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        text = text.replace("&#39;", "'").replace("&quot;", '"').replace("\xa0", " ")
+        text = text.replace("&#39;", "'").replace("&quot;", '"').replace("&nbsp;", " ").replace("\xa0", " ")
         lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
         if lines:
             return "\n".join(lines[:10])
@@ -184,33 +184,38 @@ def extract_description(html):
 
 # Lookahead that stops field-value capture at the next known field name + colon.
 # Requiring the colon prevents "Farm Valley" in an origin value from triggering a stop.
-_FIELD_STOP = r"(?=(?:Farm|Origin|Variety|Varietal|Process|Notes?|Brewing|Rest|Altitude|Elevation|Producer|Region)\s*:|\Z)"
+_FIELD_STOP = r"(?=(?:Farm|Origin|Variety|Varietal|Process|Notes?|Rest|Altitude|Elevation|Producers?|Region)\s*:|Brewing[^:\n]*:|\Z)"
 
 
 def _wix_imgs(html):
-    """All non-blurred Wix CDN image URLs found in src or data-src attributes."""
-    imgs = re.findall(
-        r'(?:src|data-src)=["\']?(https://[^"\'>\s]*wixstatic\.com/media/[^"\'>\s]+~mv2\.[a-z]+[^"\'>\s]*)["\']?',
-        html,
-    )
+    """Deduplicated Wix CDN image URLs from script-tag JSON (where Wix embeds all product images)."""
     seen = []
-    for img in imgs:
-        if "blur" not in img and img not in seen:
-            seen.append(img)
+    for script_m in re.finditer(r"<script[^>]*>(.*?)</script>", html, re.DOTALL):
+        content = script_m.group(1)
+        if "wixstatic" not in content:
+            continue
+        for url in re.findall(
+            r"https://static\.wixstatic\.com/media/[^\"'\\]+?~mv2\.[a-z]+",
+            content,
+        ):
+            if "blur" not in url and url not in seen:
+                seen.append(url)
     return seen
 
 
 def extract_bag_img(html):
-    """Product/bag image: og:image is server-rendered by Wix, most reliable."""
+    """Product/bag image: og:image is server-rendered and most reliable."""
     url = _og_meta(html, "image")
     if url and "wixstatic" in url:
-        return url
+        # Strip size params so we get the original, then re-parameterise for display
+        base = url.split("/v1/")[0]
+        return base + "/v1/fill/w_600,h_600,al_c,q_85/file.jpg"
     imgs = _wix_imgs(html)
     return imgs[0] if imgs else ""
 
 
 def extract_farm_img(html):
-    """Farm/secondary image: second distinct Wix URL, fallback to og:image."""
+    """Farm/secondary image: second script-tag URL; fallback to og:image."""
     imgs = _wix_imgs(html)
     if len(imgs) >= 2:
         return imgs[1]
@@ -368,8 +373,11 @@ def scrape_shop():
         name_m = re.search(r"<h1[^>]*>(.*?)</h1>", page_html, re.DOTALL)
         name = re.sub(r"<[^>]+>", "", name_m.group(1)).strip() if name_m else slug.replace("-", " ").title()
 
-        # Origin line from description
-        origin_m = re.search(r"[Oo]rigin[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+        # Origin line from description (fall back to Region: for products that use that label)
+        origin_m = (
+            re.search(r"[Oo]rigin[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+            or re.search(r"[Rr]egion[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+        )
         origin_line = origin_m.group(1).strip().rstrip(".").strip() if origin_m else "Specialty Coffee"
 
         # Variety

@@ -379,7 +379,6 @@ def scrape_shop():
 
 # ── BUILD HTML CARDS ─────────────────────────────────────────────────────────
 def build_cards_html(coffees):
-    extra = max(0, len(coffees) - SHOW_INITIALLY)
     cards_html = []
     for i, c in enumerate(coffees):
         cid    = i + 1
@@ -400,15 +399,12 @@ def build_cards_html(coffees):
             hidden       = hidden,
         )
         cards_html.append(card)
-    return "\n".join(cards_html), extra
+    return "\n".join(cards_html)
 
 
 # ── INJECT INTO INDEX.HTML ────────────────────────────────────────────────
 CARDS_START = "<!-- COFFEE_CARDS_START -->"
 CARDS_END   = "<!-- COFFEE_CARDS_END -->"
-COUNT_RE    = re.compile(r"See All Coffees \(\d+ more\)")
-
-
 def extract_existing_images(html):
     """Return {product_name_lower: (bag_img, farm_img)} from the current cards section."""
     existing = {}
@@ -464,15 +460,12 @@ def update_index(coffees):
                 if fallback[1] or fallback[0]:
                     print(f"  Using existing farm image for: {c['name']}")
 
-    cards_html, extra = build_cards_html(coffees)
+    cards_html = build_cards_html(coffees)
 
     # Replace between markers
     start_idx = html.index(CARDS_START) + len(CARDS_START)
     end_idx   = html.index(CARDS_END)
     new_html  = html[:start_idx] + "\n" + cards_html + "\n    " + html[end_idx:]
-
-    # Update "See All Coffees (N more)" button text
-    new_html = COUNT_RE.sub(f"See All Coffees ({extra} more)", new_html)
 
     # Update JS SHOW constant
     new_html = re.sub(
@@ -497,7 +490,8 @@ def update_index(coffees):
     with open(INDEX_FILE, "w", encoding="utf-8") as f:
         f.write(new_html)
 
-    print(f"\nUpdated {INDEX_FILE} with {len(coffees)} coffee cards ({extra} hidden).")
+    hidden_count = max(0, len(coffees) - SHOW_INITIALLY)
+    print(f"\nUpdated {INDEX_FILE} with {len(coffees)} coffee cards ({hidden_count} hidden).")
     print(f"Timestamp: {timestamp}")
 
 

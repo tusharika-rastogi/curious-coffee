@@ -150,46 +150,72 @@ def fetch(url, retries=3, delay=2):
     return ""
 
 
+def _og_meta(html, prop):
+    """Return the content= of an Open Graph <meta> tag (server-rendered by Wix)."""
+    for pat in [
+        rf'<meta[^>]+property=["\']og:{prop}["\'][^>]+content=["\']([^"\']+)["\']',
+        rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:{prop}["\']',
+    ]:
+        m = re.search(pat, html, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
 def extract_description(html):
-    """Pull the first <pre>/<code> block or paragraph text as product description."""
+    """Pull structured product description from pre/code block, or fall back to og:description."""
     m = re.search(r"<pre[^>]*>(.*?)</pre>", html, re.DOTALL)
     if not m:
         m = re.search(r"<code[^>]*>(.*?)</code>", html, re.DOTALL)
     if m:
-        # Replace <br> tags with newlines before stripping all other tags,
-        # otherwise "Field: X<br>Field: Y" collapses to "Field: XField: Y"
-        text = re.sub(r"<br\s*/?>", "\n", m.group(1))
-        text = re.sub(r"<[^>]+>", "", text)
+        raw = m.group(1)
+        # Wix stores fields in <span> elements; replace closing block tags with
+        # newlines so "Field: X</span><span>Field: Y" doesn't collapse to "Field: XField: Y"
+        raw = re.sub(r"</(?:span|p|div|li|td)[^>]*>", "\n", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"<br\s*/?>", "\n", raw, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", "", raw)
         text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        text = text.replace("&#39;", "'").replace("&quot;", '"')
+        text = text.replace("&#39;", "'").replace("&quot;", '"').replace("\xa0", " ")
         lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
-        # Keep newlines so downstream [^\n]+ regexes stop at field boundaries
-        return "\n".join(lines[:6])
-    return ""
+        if lines:
+            return "\n".join(lines[:10])
+    return _og_meta(html, "description")
 
 
-# Wix CDN URL pattern — matches with or without the legacy /v1/fill/ path segment
-_WIX_IMG_RE = re.compile(
-    r'(?:src|data-src)="(https://static\.wixstatic\.com/media/[^"]+~mv2\.[a-z]+[^"]*)"'
-)
+# Lookahead that stops field-value capture at the next known field name + colon.
+# Requiring the colon prevents "Farm Valley" in an origin value from triggering a stop.
+_FIELD_STOP = r"(?=(?:Farm|Origin|Variety|Varietal|Process|Notes?|Brewing|Rest|Altitude|Elevation|Producer|Region)\s*:|\Z)"
 
 
-def extract_farm_img(html):
-    """Find the second distinct Wix image URL in the page (farm / secondary photo)."""
-    imgs = _WIX_IMG_RE.findall(html)
+def _wix_imgs(html):
+    """All non-blurred Wix CDN image URLs found in src or data-src attributes."""
+    imgs = re.findall(
+        r'(?:src|data-src)=["\']?(https://[^"\'>\s]*wixstatic\.com/media/[^"\'>\s]+~mv2\.[a-z]+[^"\'>\s]*)["\']?',
+        html,
+    )
     seen = []
     for img in imgs:
         if "blur" not in img and img not in seen:
             seen.append(img)
-    return seen[1] if len(seen) >= 2 else (seen[0] if seen else "")
+    return seen
 
 
 def extract_bag_img(html):
-    """First clean Wix image = bag/product shot."""
-    imgs = _WIX_IMG_RE.findall(html
-    )
-    clean = [i for i in imgs if "blur" not in i]
-    return clean[0] if clean else ""
+    """Product/bag image: og:image is server-rendered by Wix, most reliable."""
+    url = _og_meta(html, "image")
+    if url and "wixstatic" in url:
+        return url
+    imgs = _wix_imgs(html)
+    return imgs[0] if imgs else ""
+
+
+def extract_farm_img(html):
+    """Farm/secondary image: second distinct Wix URL, fallback to og:image."""
+    imgs = _wix_imgs(html)
+    if len(imgs) >= 2:
+        return imgs[1]
+    url = _og_meta(html, "image")
+    return url if url and "wixstatic" in url else (imgs[0] if imgs else "")
 
 
 # ── CATEGORY & POSITION HELPERS ────────────────────────────────────────────
@@ -221,8 +247,7 @@ PILL_COLORS = ["g", "t", "g", "t", "g"]  # alternate green/teal
 
 def build_tasting_pills(notes_text):
     """Extract tasting notes and build pill HTML."""
-    # Look for 'Notes:' line in description
-    m = re.search(r"[Nn]otes?[:\s]+([^\n\.]+)", notes_text)
+    m = re.search(r"[Nn]otes?[:\s]+(.+?)" + _FIELD_STOP, notes_text, re.DOTALL)
     if not m:
         return ""
     raw = m.group(1).strip().rstrip(".")
@@ -344,16 +369,16 @@ def scrape_shop():
         name = re.sub(r"<[^>]+>", "", name_m.group(1)).strip() if name_m else slug.replace("-", " ").title()
 
         # Origin line from description
-        origin_m = re.search(r"[Oo]rigin[:\s]+([^\n]+)", description)
-        origin_line = origin_m.group(1).strip().rstrip(".") if origin_m else "Specialty Coffee"
+        origin_m = re.search(r"[Oo]rigin[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+        origin_line = origin_m.group(1).strip().rstrip(".").strip() if origin_m else "Specialty Coffee"
 
         # Variety
-        var_m = re.search(r"[Vv]ariet[y|ies][:\s]+([^\n]+)", description)
-        variety = var_m.group(1).strip().rstrip(".") if var_m else ""
+        var_m = re.search(r"[Vv]ariet(?:y|ies)?[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+        variety = var_m.group(1).strip().rstrip(".").strip() if var_m else ""
 
-        # Back label
-        alt_m = re.search(r"[Aa]ltitude[:\s]+(\d+[^\n]*)", description)
-        alt_txt = alt_m.group(1).strip().rstrip(".") if alt_m else ""
+        # Back label (altitude / elevation)
+        alt_m = re.search(r"(?:[Aa]ltitude|[Ee]levation)[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+        alt_txt = alt_m.group(1).strip().rstrip(".").strip() if alt_m else ""
         back_lbl = f"{origin_line}" + (f" &middot; {alt_txt}" if alt_txt else "")
 
         coffees.append({

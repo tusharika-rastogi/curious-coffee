@@ -95,9 +95,8 @@
 
     .flip-wrap{perspective:1200px;height:540px;position:relative;cursor:pointer;touch-action:manipulation}
     .flip-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;transition:transform .7s cubic-bezier(.4,0,.2,1)}
-    .flip-wrap:hover .flip-inner,.flip-wrap.flipped .flip-inner{transform:rotateY(180deg)}
-    body.touch-device .flip-wrap:hover .flip-inner{transform:none}
-    body.touch-device .flip-wrap.flipped .flip-inner{transform:rotateY(180deg)}
+    .flip-wrap.flipped .flip-inner{transform:rotateY(180deg)}
+    .flip-wrap:not(.flipped):hover .flip-front{box-shadow:inset 0 0 0 1.5px rgba(61,181,74,.35)}
     .flip-front,.flip-back{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:16px}
     .flip-wrap .flip-back{pointer-events:none}
     .flip-wrap.flipped .flip-front{pointer-events:none}
@@ -1419,24 +1418,26 @@ Elevation: 1750 masl</p>
     btn.textContent='Subscribed!';btn.style.background='#1C1008';btn.disabled=true;inp.value='';
   }
 
-  // Tap-to-flip on touch devices
+  // Touch-device detection (used for CSS hooks only)
   if('ontouchstart' in window || navigator.maxTouchPoints > 0){
     document.body.classList.add('touch-device');
-    document.querySelectorAll('.flip-wrap').forEach(wrap=>{
-      wrap.addEventListener('click',e=>{
-        const isFlipped=wrap.classList.contains('flipped');
-        const visibleFace=wrap.querySelector(isFlipped?'.flip-back':'.flip-front');
-        const link=e.target.closest('a,button');
-        if(link && visibleFace.contains(link))return;
-        if(link)e.preventDefault();
-        wrap.classList.toggle('flipped');
-      });
-    });
-
-    // Roast flip (no links inside, so simpler toggle)
-    const roastFlip=document.querySelector('.roast-flip');
-    if(roastFlip) roastFlip.addEventListener('click',()=>roastFlip.classList.toggle('flipped'));
   }
+
+  // Click-to-flip on all devices — links/buttons on the visible face pass through
+  document.querySelectorAll('.flip-wrap').forEach(wrap=>{
+    wrap.addEventListener('click',e=>{
+      const isFlipped=wrap.classList.contains('flipped');
+      const visibleFace=wrap.querySelector(isFlipped?'.flip-back':'.flip-front');
+      const link=e.target.closest('a,button');
+      if(link && visibleFace.contains(link))return;
+      if(link)e.preventDefault();
+      wrap.classList.toggle('flipped');
+    });
+  });
+
+  // Roast flip (no links inside, so simpler toggle)
+  const roastFlip=document.querySelector('.roast-flip');
+  if(roastFlip) roastFlip.addEventListener('click',()=>roastFlip.classList.toggle('flipped'));
 
   // Smooth scroll for anchor links only (not buttons)
   document.querySelectorAll('a[href^="#"]').forEach(a=>{

@@ -242,9 +242,9 @@ def get_object_position(farm_img_url):
     # Check dimensions from URL
     w = re.search(r"w_(\d+)", farm_img_url)
     h = re.search(r"h_(\d+)", farm_img_url)
-    if w and h and int(h.group(1)) > int(w.group(1)):
-        return "top"   # portrait
-    return "center"    # landscape / scenery
+    if w and h and int(w.group(1)) > int(h.group(1)):
+        return "center"   # clearly landscape — scenery, no face at top
+    return "top"          # portrait or unknown: keep faces in frame
 
 
 # ── CARD BUILDER ───────────────────────────────────────────────────────────

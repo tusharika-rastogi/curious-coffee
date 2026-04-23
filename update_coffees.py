@@ -44,6 +44,7 @@ CATEGORY_MAP = {
 FACE_TOP_HASHES = {
     "d6df75ab",  # Jairo Arcila smiling
     "c8644956",  # Jairo Arcila farm with person
+    "1a2930e5",  # shared producer portrait (Dinestia / Bella Alejandria)
 }
 FACE_TOP_LEFT_HASHES = {
     "05057603",  # Andrés Martinez pointing at cherries
@@ -297,8 +298,24 @@ def build_tasting_pills(notes_text):
     return "".join(pills)
 
 
+_FIELD_ORDER = ["Farm", "Origin", "Variety", "Process", "Notes", "Brewing", "Rest from roast"]
+
+def build_fields_html(fields):
+    rows = []
+    for key in _FIELD_ORDER:
+        val = (fields.get(key) or "").strip()
+        if val:
+            rows.append(
+                f'<div class="field-row">'
+                f'<span class="field-key">{key}</span>'
+                f'<span class="field-val">{val}</span>'
+                f'</div>'
+            )
+    return '<div class="back-fields">' + "".join(rows) + "</div>" if rows else ""
+
+
 def build_card(cid, name, variety, origin_line, price, oos,
-               bag_img, farm_img, back_lbl, description, raw_description, link, category, hidden):
+               bag_img, farm_img, back_lbl, fields, raw_description, link, category, hidden):
 
     notes_html = build_tasting_pills(raw_description)
     if not notes_html:
@@ -346,7 +363,7 @@ def build_card(cid, name, variety, origin_line, price, oos,
             <div class="back-body">
               <span class="back-lbl">{back_lbl}</span>
               <h3 class="back-title">{name}</h3>
-              <p class="back-desc">{description}</p>
+              {build_fields_html(fields)}
               {back_btn}
             </div>
           </div>
@@ -409,21 +426,49 @@ def scrape_shop():
             val = m.group(1).strip().rstrip(".").strip()
             return val if len(val) <= maxlen else ""
 
-        # Origin line from description (fall back to Region: for products that use that label)
+        # Origin line — colon format first, then tabular "Location\nvalue" fallback
         origin_m = (
-            re.search(r"[Oo]rigin[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
-            or re.search(r"[Rr]egion[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+            re.search(r"(?:^|\n)[Oo]rigin\s*:\s*(.+?)" + _FIELD_STOP, description, re.DOTALL | re.MULTILINE)
+            or re.search(r"(?:^|\n)[Rr]egion\s*:\s*(.+?)" + _FIELD_STOP, description, re.DOTALL | re.MULTILINE)
+            or re.search(r"(?:^|\n)Location\s*\n([^\n]+)", description, re.MULTILINE)
         )
         origin_line = _field(origin_m) or "Specialty Coffee"
 
-        # Variety
-        var_m = re.search(r"[Vv]ariet(?:y|ies)?[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+        # Variety — "Cultivar\nvalue" tabular fallback for Jairo Arcila style
+        var_m = (
+            re.search(r"(?:^|\n)[Vv]ariet(?:y|ies)?\s*:\s*(.+?)" + _FIELD_STOP, description, re.DOTALL | re.MULTILINE)
+            or re.search(r"(?:^|\n)Cultivar\s*\n([^\n]+)", description, re.MULTILINE)
+        )
         variety = _field(var_m)
 
-        # Back label (altitude / elevation)
-        alt_m = re.search(r"(?:[Aa]ltitude|[Ee]levation)[:\s]+(.+?)" + _FIELD_STOP, description, re.DOTALL)
+        # Back label (altitude / elevation) — tabular "Altitude\nvalue" fallback
+        alt_m = (
+            re.search(r"(?:^|\n)(?:[Aa]ltitude|[Ee]levation)\s*:\s*(.+?)" + _FIELD_STOP, description, re.DOTALL | re.MULTILINE)
+            or re.search(r"(?:^|\n)Altitude\s*\n([^\n]+)", description, re.MULTILINE)
+        )
         alt_txt = _field(alt_m, maxlen=30)
         back_lbl = f"{origin_line}" + (f" &middot; {alt_txt}" if alt_txt else "")
+
+        # Additional structured fields for back card.
+        # All patterns require colon + line-start to avoid matching words inside narrative prose.
+        MF = re.DOTALL | re.MULTILINE
+
+        farm_m    = re.search(r"(?:^|\n)[Ff]arm\s*:\s*(.+?)" + _FIELD_STOP, description, MF)
+        farm_name = _field(farm_m, maxlen=100)
+
+        # Tabular fallback: "Process\nhoney process..." (Jairo Arcila style, no colon)
+        process_m = (re.search(r"(?:^|\n)[Pp]rocess\s*:\s*(.+?)" + _FIELD_STOP, description, MF)
+                     or re.search(r"(?:^|\n)Process\s*\n([^\n]+)", description, re.MULTILINE))
+        process   = _field(process_m, maxlen=80)
+
+        notes_m   = re.search(r"(?:^|\n)[Nn]otes?\s*:\s*(.+?)" + _FIELD_STOP, description, MF)
+        notes_txt = _field(notes_m, maxlen=200)
+
+        brewing_m = re.search(r"(?:^|\n)[Bb]rewing[^:]*:\s*(.+?)" + _FIELD_STOP, description, MF)
+        brewing   = _field(brewing_m, maxlen=300)
+
+        rest_m    = re.search(r"(?:^|\n)[Rr]est[^:]*:\s*([^\n]+)", description, re.MULTILINE)
+        rest      = _field(rest_m, maxlen=150)
 
         coffees.append({
             "url":         url,
@@ -435,8 +480,16 @@ def scrape_shop():
             "bag_img":     bag_img,
             "farm_img":    farm_img or bag_img,
             "back_lbl":    back_lbl,
-            "description": extract_narrative(description),
-            "raw_description": description,   # used for tasting-pill extraction
+            "raw_description": description,
+            "fields": {
+                "Farm":            farm_name,
+                "Origin":          origin_line if origin_line != "Specialty Coffee" else "",
+                "Variety":         variety,
+                "Process":         process,
+                "Notes":           notes_txt,
+                "Brewing":         brewing,
+                "Rest from roast": rest,
+            },
             "category":    category,
         })
 
@@ -465,7 +518,7 @@ def build_cards_html(coffees):
             bag_img         = c["bag_img"],
             farm_img        = c["farm_img"],
             back_lbl        = c["back_lbl"],
-            description     = c["description"],
+            fields          = c["fields"],
             raw_description = c["raw_description"],
             link            = c["url"],
             category        = c["category"],

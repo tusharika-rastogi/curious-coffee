@@ -315,7 +315,7 @@ def build_fields_html(fields):
 
 
 def build_card(cid, name, variety, origin_line, price, oos,
-               bag_img, farm_img, back_lbl, fields, raw_description, link, category, hidden):
+               bag_img, farm_img, back_lbl, fields, narrative, raw_description, link, category, hidden):
 
     notes_html = build_tasting_pills(raw_description)
     if not notes_html:
@@ -364,6 +364,7 @@ def build_card(cid, name, variety, origin_line, price, oos,
               <span class="back-lbl">{back_lbl}</span>
               <h3 class="back-title">{name}</h3>
               {build_fields_html(fields)}
+              {f'<p class="back-desc">{narrative}</p>' if narrative else ""}
               {back_btn}
             </div>
           </div>
@@ -480,6 +481,7 @@ def scrape_shop():
             "bag_img":     bag_img,
             "farm_img":    farm_img or bag_img,
             "back_lbl":    back_lbl,
+            "narrative":   extract_narrative(description),
             "raw_description": description,
             "fields": {
                 "Farm":            farm_name,
@@ -519,6 +521,7 @@ def build_cards_html(coffees):
             farm_img        = c["farm_img"],
             back_lbl        = c["back_lbl"],
             fields          = c["fields"],
+            narrative       = c["narrative"],
             raw_description = c["raw_description"],
             link            = c["url"],
             category        = c["category"],

@@ -152,27 +152,31 @@ def fetch(url, retries=3, delay=2):
 
 def extract_description(html):
     """Pull the first <pre>/<code> block or paragraph text as product description."""
-    # Wix stores product descriptions in a pre block
     m = re.search(r"<pre[^>]*>(.*?)</pre>", html, re.DOTALL)
     if not m:
         m = re.search(r"<code[^>]*>(.*?)</code>", html, re.DOTALL)
     if m:
-        text = re.sub(r"<[^>]+>", "", m.group(1))
+        # Replace <br> tags with newlines before stripping all other tags,
+        # otherwise "Field: X<br>Field: Y" collapses to "Field: XField: Y"
+        text = re.sub(r"<br\s*/?>", "\n", m.group(1))
+        text = re.sub(r"<[^>]+>", "", text)
         text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
         text = text.replace("&#39;", "'").replace("&quot;", '"')
-        # Take first 3 meaningful lines
         lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
-        return " ".join(lines[:6])
+        # Keep newlines so downstream [^\n]+ regexes stop at field boundaries
+        return "\n".join(lines[:6])
     return ""
+
+
+# Wix CDN URL pattern — matches with or without the legacy /v1/fill/ path segment
+_WIX_IMG_RE = re.compile(
+    r'(?:src|data-src)="(https://static\.wixstatic\.com/media/[^"]+~mv2\.[a-z]+[^"]*)"'
+)
 
 
 def extract_farm_img(html):
     """Find the second distinct Wix image URL in the page (farm / secondary photo)."""
-    imgs = re.findall(
-        r'src="(https://static\.wixstatic\.com/media/[^"]+~mv2\.[a-z]+/v1/fill/[^"]+)"',
-        html
-    )
-    # Deduplicate keeping order, skip blurred thumbnails
+    imgs = _WIX_IMG_RE.findall(html)
     seen = []
     for img in imgs:
         if "blur" not in img and img not in seen:
@@ -182,9 +186,7 @@ def extract_farm_img(html):
 
 def extract_bag_img(html):
     """First clean Wix image = bag/product shot."""
-    imgs = re.findall(
-        r'src="(https://static\.wixstatic\.com/media/[^"]+~mv2\.[a-z]+/v1/fill/[^"]+)"',
-        html
+    imgs = _WIX_IMG_RE.findall(html
     )
     clean = [i for i in imgs if "blur" not in i]
     return clean[0] if clean else ""
